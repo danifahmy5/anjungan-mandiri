@@ -86,6 +86,14 @@ function summarizeBody(b) {
   if (typeof b.heightPx === "number") out.heightPx = b.heightPx;
   if (typeof b.rawBase64 === "string") out.rawBase64_len = b.rawBase64.length;
   if (typeof b.dataBase64 === "string") out.dataBase64_len = b.dataBase64.length;
+  if (typeof b.rawData === "string") out.rawData_len = b.rawData.length;
+  if (typeof b.payload === "string") out.payload_len = b.payload.length;
+  if (typeof b.rawPayload === "string") out.rawPayload_len = b.rawPayload.length;
+  if (typeof b.raw === "string") out.raw_len = b.raw.length;
+  if (typeof b.rawHex === "string") out.rawHex_len = b.rawHex.length;
+  if (Array.isArray(b.rawBytes)) out.rawBytes_len = b.rawBytes.length;
+  if (Array.isArray(b.bytes)) out.bytes_len = b.bytes.length;
+  if (Array.isArray(b.commands)) out.commands_len = b.commands.length;
   if (typeof b.pdfBase64 === "string") out.pdfBase64_len = b.pdfBase64.length;
   if (typeof b.html === "string") out.html_len = b.html.length;
   if (typeof b.data === "string") out.data_preview = b.data.slice(0, 120);
@@ -145,6 +153,280 @@ function copyBinaryToPrinter(tempFilePath, sharePath) {
   });
 }
 
+const BASE64_REGEX = /^[0-9a-z+/=]+$/i;
+const HEX_REGEX = /^[0-9a-f]+$/i;
+const STRING_PAYLOAD_FIELDS = [
+  "rawBase64",
+  "dataBase64",
+  "raw",
+  "rawData",
+  "payload",
+  "rawPayload",
+  "data",
+  "text",
+  "command",
+  "commands",
+  "lines",
+  "base64",
+  "base64Data",
+  "bytesBase64",
+  "content",
+  "value",
+];
+const BASE64_HINT_FIELDS = new Set([
+  "rawBase64",
+  "dataBase64",
+  "base64",
+  "base64Data",
+  "bytesBase64",
+]);
+const HEX_HINT_FIELDS = new Set(["rawHex", "hex", "hexData", "dataHex", "payloadHex"]);
+const BYTE_ARRAY_FIELDS = [
+  "rawBytes",
+  "bytes",
+  "dataBytes",
+  "payloadBytes",
+  "buffer",
+  "rawBuffer",
+];
+
+function decodeHexString(input) {
+  const normalized = input.replace(/\s+/g, "");
+  if (!normalized) return null;
+  if (normalized.length % 2 !== 0) {
+    throw new Error("Hex payload must have an even length");
+  }
+  if (!HEX_REGEX.test(normalized)) {
+    throw new Error("Hex payload contains invalid characters");
+  }
+  return Buffer.from(normalized, "hex");
+}
+
+function decodeFlexibleBase64(input) {
+  const normalized = input.replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+  if (!normalized) return null;
+  const bare = normalized.replace(/=+$/g, "");
+  if (!BASE64_REGEX.test(bare)) return null;
+  const pad = normalized.length % 4 === 0 ? 0 : 4 - (normalized.length % 4);
+  const padded = normalized + "=".repeat(pad);
+  try {
+    const buf = Buffer.from(padded, "base64");
+    if (!buf.length) return null;
+    return buf;
+  } catch (e) {
+    return null;
+  }
+}
+
+function isByteArray(value) {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (v) =>
+        typeof v === "number" &&
+        Number.isInteger(v) &&
+        v >= 0 &&
+        v <= 255
+    )
+  );
+}
+
+function extractBufferFromBufferLike(value) {
+  if (!value) return null;
+  if (Buffer.isBuffer(value)) return Buffer.from(value);
+  if (isByteArray(value)) return Buffer.from(value);
+  if (typeof value === "object" && value && value.type === "Buffer" && Array.isArray(value.data)) {
+    return Buffer.from(value.data);
+  }
+  return null;
+}
+
+function resolvePrinterShare(body) {
+  if (!body || typeof body !== "object") return null;
+  const candidates = [
+    body.printerShare,
+    body.printer,
+    body.share,
+    body.shareName,
+    body.sharePath,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim().length) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+
+function resolveRawBuffer(body) {
+  if (!body || typeof body !== "object") return null;
+
+  const encoding =
+    typeof body.encoding === "string" ? body.encoding.trim().toLowerCase() : null;
+
+  for (const field of BYTE_ARRAY_FIELDS) {
+    const candidate = extractBufferFromBufferLike(body[field]);
+    if (candidate && candidate.length) return candidate;
+  }
+
+  const rawHex =
+    typeof body.rawHex === "string" && body.rawHex.length ? body.rawHex : null;
+
+  let hintedHex = null;
+  if (!rawHex) {
+    for (const key of HEX_HINT_FIELDS) {
+      if (typeof body[key] === "string" && body[key].length) {
+        hintedHex = body[key];
+        break;
+      }
+    }
+  }
+
+  const stringCandidates = [];
+  STRING_PAYLOAD_FIELDS.forEach((field) => {
+    const value = body[field];
+    if (typeof value === "string" && value.length) {
+      stringCandidates.push({ value, field });
+      return;
+    }
+    if (Array.isArray(value) && value.length) {
+      if (isByteArray(value)) {
+        stringCandidates.push({ value: Buffer.from(value), field, buffer: true });
+        return;
+      }
+      if (value.every((v) => typeof v === "string")) {
+        stringCandidates.push({ value: value.join(""), field });
+      }
+    }
+  });
+
+  if (!stringCandidates.length) {
+    for (const [key, value] of Object.entries(body)) {
+      if (typeof value === "string" && value.length) {
+        stringCandidates.push({ value, field: key });
+        break;
+      }
+      const bufferCandidate = extractBufferFromBufferLike(value);
+      if (bufferCandidate && bufferCandidate.length) {
+        return bufferCandidate;
+      }
+    }
+  }
+
+  if (rawHex) {
+    const hexBuffer = decodeHexString(rawHex);
+    if (hexBuffer) return hexBuffer;
+  }
+  if (hintedHex) {
+    const hexBuffer = decodeHexString(hintedHex);
+    if (hexBuffer) return hexBuffer;
+  }
+
+  if (!stringCandidates.length) return null;
+
+  const candidate = stringCandidates[0];
+  if (candidate.buffer && Buffer.isBuffer(candidate.value)) {
+    return candidate.value;
+  }
+
+  const primary = candidate.value;
+  const sourceField = candidate.field;
+
+  const hintedBase64 =
+    encoding === "base64" || BASE64_HINT_FIELDS.has(sourceField);
+  const hintedHexField = encoding === "hex" || HEX_HINT_FIELDS.has(sourceField);
+
+  try {
+    if (hintedHexField) {
+      const hexBuffer = decodeHexString(primary);
+      if (!hexBuffer) throw new Error("Invalid hex payload");
+      return hexBuffer;
+    }
+    if (hintedBase64) {
+      const base64Buffer = decodeFlexibleBase64(primary);
+      if (!base64Buffer) throw new Error("Invalid base64 payload");
+      return base64Buffer;
+    }
+    if (encoding === "utf8" || encoding === "text") {
+      return Buffer.from(primary, "utf8");
+    }
+    if (encoding === "binary" || encoding === "latin1") {
+      return Buffer.from(primary, "binary");
+    }
+
+    const base64Buffer = decodeFlexibleBase64(primary);
+    if (base64Buffer) return base64Buffer;
+
+    const stripped = primary.replace(/\s+/g, "");
+    if (stripped.length && stripped.length % 2 === 0 && HEX_REGEX.test(stripped)) {
+      const hexBuffer = decodeHexString(primary);
+      if (hexBuffer) return hexBuffer;
+    }
+
+    return Buffer.from(primary, "utf8");
+  } catch (e) {
+    throw new Error(`Failed to decode raw payload: ${e.message}`);
+  }
+}
+
+function runPowerShell(script) {
+  const normalized = script.replace(/"/g, '\\"');
+  const command = `powershell.exe -NoProfile -Command "${normalized}"`;
+  return new Promise((resolve, reject) => {
+    exec(
+      command,
+      { windowsHide: true, maxBuffer: 10 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (error) return reject(new Error(stderr || error.message));
+        resolve(stdout);
+      }
+    );
+  });
+}
+
+async function getPrintersFromPowerShell() {
+  const script =
+    "$ErrorActionPreference='Stop'; Get-CimInstance Win32_Printer -Property DeviceID,Name,PrinterPaperNames | " +
+    "Select-Object -Property DeviceID,Name,PrinterPaperNames | ConvertTo-Json -Compress -Depth 4";
+  const rawOutput = await runPowerShell(script);
+  const trimmed = (rawOutput || "").trim().replace(/^\uFEFF/, "");
+  if (!trimmed) return [];
+  let parsed;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (e) {
+    throw new Error(`Failed to parse printer list: ${e.message}`);
+  }
+  const entries = Array.isArray(parsed) ? parsed : [parsed];
+  return entries
+    .filter(Boolean)
+    .map((p) => ({
+      deviceId: p.DeviceID || p.Name || "",
+      name: p.Name || p.DeviceID || "",
+      paperSizes: Array.isArray(p.PrinterPaperNames) ? p.PrinterPaperNames : [],
+    }))
+    .filter((p) => p.name || p.deviceId);
+}
+
+async function enumeratePrinters() {
+  try {
+    const printers = await getPrinters();
+    if (Array.isArray(printers) && printers.length > 0) {
+      return printers;
+    }
+    logger.warn("PRINTERS_FALLBACK_EMPTY", { reason: "pdf-to-printer returned empty list" });
+  } catch (e) {
+    logger.warn("PRINTERS_FALLBACK_ERROR", { error: e.message });
+  }
+  const fallback = await getPrintersFromPowerShell();
+  if (!fallback.length) {
+    logger.warn("PRINTERS_FALLBACK_EMPTY", { reason: "PowerShell returned empty list" });
+  }
+  return fallback;
+}
+
 // ---- Security (optional) ----
 app.use((req, res, next) => {
   if (!API_KEY) return next();
@@ -163,28 +445,48 @@ app.get("/", (req, res) => {
 // ---- Enumerate printers (for PDF path) ----
 app.get("/printers", async (req, res) => {
   try {
-    const printers = await getPrinters();
-    const list = printers.map((p) => (typeof p === "string" ? p : p.name));
+    const printers = await enumeratePrinters();
+    const list = printers
+      .map((p) => {
+        if (!p) return null;
+        if (typeof p === "string") return p;
+        return p.name || p.deviceId || null;
+      })
+      .filter((name) => typeof name === "string" && name.length > 0);
     res.json({ success: true, printers: list });
   } catch (e) {
-    logger.error(now(), "PRINTERS_ERROR", e);
+    logger.error("PRINTERS_ERROR", { id: req.id || null, error: e.message, stack: e.stack });
     res.status(500).json({ success: false, error: e.message });
   }
 });
 
 // ---- RAW (ESC/POS) ----
-// Body: { rawBase64: string (required), printerShare: "ShareName" | "\\\\HOST\\Share" (required), encoding?: "base64"|"hex" }
+// Body can include:
+//  { rawBase64 | dataBase64 | raw | rawData | rawHex | rawBytes | bytes | commands | payload | text, printerShare | printer }
+// Optional: encoding: "base64" | "hex" | "utf8" | "text" | "binary"
 app.post("/print-raw", async (req, res) => {
   try {
-    const { rawBase64, printerShare, encoding } = req.body || {};
-    if (!rawBase64 || !printerShare) {
-      return res
-        .status(400)
-        .json({ success: false, error: "rawBase64 and printerShare are required" });
+    const shareCandidate = resolvePrinterShare(req.body);
+    if (!shareCandidate) {
+      return res.status(400).json({
+        success: false,
+        error: "printerShare (or printer/share/shareName) is required",
+      });
     }
-    const buffer = Buffer.from(rawBase64, encoding === "hex" ? "hex" : "base64");
+    const buffer = resolveRawBuffer(req.body);
+    if (!buffer || !buffer.length) {
+      logger.warn("RAW_MISSING_PAYLOAD", {
+        id: req.id,
+        keys: Array.isArray(req.body) ? [] : Object.keys(req.body || {}),
+      });
+      return res.status(400).json({
+        success: false,
+        error:
+          "Raw payload is required. Provide rawBase64, dataBase64, raw, rawHex, or rawBytes.",
+      });
+    }
     const temp = writeTempFile(buffer, "bin");
-    const sharePath = buildSharePath(printerShare);
+    const sharePath = buildSharePath(shareCandidate);
     await copyBinaryToPrinter(temp, sharePath);
     logger.info("RAW_OK", { id: req.id, sharePath });
     res.json({ success: true, message: `Sent RAW to ${sharePath}` });
