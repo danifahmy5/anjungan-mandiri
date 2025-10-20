@@ -11,6 +11,8 @@ Agar instalasi mudah dan konsisten di Windows maupun Linux, gunakan skrip otomat
 
 - `windows.ps1` — instal & jalankan di **Windows**
 - `linux.sh` — instal & jalankan di **Linux**
+-  — jalankan di powershele dengan administrator agar ps1 dapat di jalankan
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\windows.ps1` cara menjalankannya
 
 > **Catatan:** Kedua skrip mendeteksi folder dasar (base dir) dari lokasi file skrip, jadi Anda cukup meletakkannya di **`{ROOT_DIR}/anjungan-mandiri`**.
 
@@ -36,6 +38,10 @@ Agar instalasi mudah dan konsisten di Windows maupun Linux, gunakan skrip otomat
    cd {ROOT_DIR}/anjungan-mandiri
    ```
 3. Jalankan skrip (pilih salah satu):
+   - Jalankan ini sebelum di jalankan di powershell
+     ```powershell
+      Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force;
+     ```
    - Jika tersedia **PowerShell 7**:  
      ```powershell
      pwsh -NoProfile -ExecutionPolicy Bypass -File .\windows.ps1
