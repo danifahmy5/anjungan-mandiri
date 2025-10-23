@@ -20,7 +20,58 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { exec } = require("child_process");
-const { getPrinters, print: printPdf } = require("pdf-to-printer");
+const { getPrinters } = require("pdf-to-printer");
+
+// Patched version of pdf-to-printer's print() to handle spaces in printer names on Windows
+function printPdfWithQuotedPrinterName(filePath, options) {
+  return new Promise((resolve, reject) => {
+    // Path to SumatraPDF executable within pdf-to-printer
+    const sumatraPdfPath = path.join(
+      __dirname,
+      "node_modules",
+      "pdf-to-printer",
+      "dist",
+      "SumatraPDF-3.4.6-32.exe"
+    );
+
+    // Check if SumatraPDF exists
+    if (!fs.existsSync(sumatraPdfPath)) {
+      return reject(new Error(`SumatraPDF executable not found at ${sumatraPdfPath}`));
+    }
+
+    const printerName = options.printer;
+
+    // Base command, ensuring printer name is quoted
+    let cmd = `"${sumatraPdfPath}" -print-to "${printerName}" -silent`;
+
+    // Build print settings string
+    const printSettings = [];
+    if (options.scale === "noscale") {
+      printSettings.push("noscale");
+    }
+    if (options.orientation === "landscape") {
+      printSettings.push("landscape");
+    }
+    if (options.copies && Number.isInteger(options.copies) && options.copies > 0) {
+      printSettings.push(`${options.copies}x`);
+    }
+
+    if (printSettings.length > 0) {
+      cmd += ` -print-settings "${printSettings.join(",")}"`;
+    }
+
+    // Add the file path to print, ensuring it's quoted
+    cmd += ` "${filePath}"`;
+
+    exec(cmd, { windowsHide: true }, (err, stdout, stderr) => {
+      if (err) {
+        logger.error("PRINT_PDF_CMD_FAILED", { cmd: cmd, error: stderr || err.message, stack: err.stack });
+        return reject(new Error(stderr || err.message));
+      }
+      resolve(stdout);
+    });
+  });
+}
 
 // ==== Logging (winston with daily rotate) ====
 const { createLogger, format, transports } = require("winston");
@@ -29,6 +80,9 @@ const { randomUUID } = require("crypto");
 
 const LOG_DIR = process.env.LOG_DIR || path.join(process.cwd(), "logs");
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+
+const CETAK_DIR = process.env.CETAK_DIR || path.join(process.cwd(), "cetak");
+if (!fs.existsSync(CETAK_DIR)) fs.mkdirSync(CETAK_DIR, { recursive: true });
 
 const rotate = new transports.DailyRotateFile({
   dirname: LOG_DIR,
@@ -500,31 +554,232 @@ app.post("/print-raw", async (req, res) => {
 // Body (choose one):
 //  { data: "TSPL/ZPL text", printerShare: "ShareName", newline?: true }
 //  { dataBase64: "...", printerShare: "ShareName" }
+// app.post("/print-label-v22", async (req, res) => {
+//   try {
+//     const { html } = req.body || {};
+//     const targetPrinter = resolvePrinterShare(req.body);
+
+//     if (!targetPrinter) {
+//       return res.status(400).json({
+//         success: false,
+//         error: "printer or printerShare is required",
+//       });
+//     }
+
+//     // HTML Printing Logic for Labels
+//     if (html) {
+//       let browser;
+//       try {
+//         const puppeteer = require("puppeteer");
+//         browser = await puppeteer.launch({
+//           headless: true,
+//           args: ["--no-sandbox", "--disable-setuid-sandbox"],
+//         });
+//         const page = await browser.newPage();
+
+//         // Set a viewport that matches the label size at 203dpi
+//         // 60mm * 8dpmm = 480px
+//         // 20mm * 8dpmm = 160px
+//         await page.setViewport({
+//             width: 480,
+//             height: 160,
+//             deviceScaleFactor: 1,
+//         });
+
+//         // Wrap the provided HTML in a container that enforces the size and clips overflow
+//         const styledHtml = `
+//             <style>
+//                 body { margin: 0; padding: 0; }
+//                 .label-container {
+//                     width: 60mm;
+//                     height: 20mm;
+//                     box-sizing: border-box;
+//                     overflow: hidden;
+//                 }
+//             </style>
+//             <div class="label-container">
+//                 ${html}
+//             </div>
+//         `;
+
+//         await page.setContent(styledHtml, { waitUntil: "networkidle0" });
+
+//         const pdfBuffer = await page.pdf({
+//           width: "60mm",
+//           height: "20mm",
+//           printBackground: true,
+//           margin: { top: "0px", right: "0px", bottom: "0px", left: "0px" },
+//         });
+
+//         const temp = writeTempFile(pdfBuffer, "pdf");
+//         await printPdfWithQuotedPrinterName(temp, {
+//           printer: targetPrinter,
+//           scale: "noscale",
+//         });
+//         fs.unlink(temp, () => {});
+//         logger.info("LABEL_HTML_OK", { id: req.id, printer: targetPrinter });
+//         return res.json({
+//           success: true,
+//           message: `Sent HTML LABEL to ${targetPrinter}`,
+//         });
+//       } catch (e) {
+//         logger.error("LABEL_HTML_ERROR", {
+//           id: req.id,
+//           error: e.message,
+//           stack: e.stack,
+//         });
+//         return res.status(500).json({ success: false, error: e.message });
+//       } finally {
+//         if (browser) await browser.close();
+//       }
+//     }
+
+//     // RAW Printing Logic for Labels
+//     const buffer = resolveRawBuffer(req.body);
+//     if (buffer && buffer.length > 0) {
+//       const sharePath = buildSharePath(targetPrinter);
+//       const temp = writeTempFile(buffer, "lbl");
+//       await copyBinaryToPrinter(temp, sharePath);
+//       logger.info("LABEL_RAW_OK", { id: req.id, sharePath });
+//       return res.json({
+//         success: true,
+//         message: `Sent RAW LABEL to ${sharePath}`,
+//       });
+//     }
+
+//     return res.status(400).json({
+//       success: false,
+//       error:
+//         "Payload is required. Provide 'html' for HTML content, or a raw data field (e.g., 'rawData', 'rawBase64') for RAW content.",
+//     });
+//   } catch (e) {
+//     logger.error("LABEL_ERROR", { id: req.id, error: e.message, stack: e.stack });
+//     res.status(500).json({ success: false, error: e.message });
+//   }
+// });
+
 app.post("/print-label", async (req, res) => {
   try {
-    const { data, dataBase64, printerShare, newline = true } = req.body || {};
-    if (!printerShare || (!data && !dataBase64)) {
-      return res
-        .status(400)
-        .json({ success: false, error: "printerShare and data or dataBase64 are required" });
+    const { html } = req.body || {};
+    const targetPrinter = resolvePrinterShare(req.body);
+
+    if (!targetPrinter) {
+      return res.status(400).json({
+        success: false,
+        error: "printer or printerShare is required",
+      });
     }
-    let buffer;
-    if (dataBase64) {
-      buffer = Buffer.from(dataBase64, "base64");
-    } else {
-      const str = String(data);
-      buffer = Buffer.from(newline ? str.replace(/\r?\n/g, "\r\n") : str, "utf8");
+
+    if (html) {
+      let browser;
+      try {
+        const puppeteer = require("puppeteer");
+        browser = await puppeteer.launch({
+          headless: true,
+          args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        });
+        const page = await browser.newPage();
+
+        // ukuran label 60mm × 20mm @ 203dpi (≈ 8 px/mm)
+        const LABEL_WIDTH_PX = 480;
+        const LABEL_HEIGHT_PX = 160;
+
+        await page.setViewport({
+          width: LABEL_WIDTH_PX,
+          height: LABEL_HEIGHT_PX,
+          deviceScaleFactor: 1,
+        });
+
+        // HTML dasar
+        const styledHtml = `
+          <style>
+            body { margin: 0; padding: 0; }
+            .label-container {
+              width: 60mm;
+              height: 20mm;
+              box-sizing: border-box;
+              overflow: visible;
+              transform-origin: top left;
+            }
+          </style>
+          <div class="label-container">
+            ${html}
+          </div>
+        `;
+
+        await page.setContent(styledHtml, { waitUntil: "networkidle0" });
+
+        // 🔹 ukur konten aktual dan sesuaikan skala agar muat ke area labelsssssss
+        await page.evaluate((LABEL_WIDTH_PX, LABEL_HEIGHT_PX) => {
+          const container = document.querySelector(".label-container");
+          const contentWidth = container.scrollWidth;
+          const contentHeight = container.scrollHeight;
+
+          // rasio skala agar muat seluruhnya
+          const scaleX = LABEL_WIDTH_PX / contentWidth;
+          const scaleY = LABEL_HEIGHT_PX / contentHeight;
+          const scale = Math.min(scaleX, scaleY, 1); // jangan membesar, hanya mengecil
+
+          container.style.transform = `scale(${scale})`;
+        }, LABEL_WIDTH_PX, LABEL_HEIGHT_PX);
+
+        // hasilkan PDF
+        const pdfBuffer = await page.pdf({
+          width: "60mm",
+          height: "20mm",
+          printBackground: true,
+          padding: { top: "0px", right: "0px", bottom: "0px", left: "200px" },
+        });
+
+        const pdfPath = path.join(
+          CETAK_DIR,
+          `label-${Date.now()}-${req.id}.pdf`
+        );
+        fs.writeFileSync(pdfPath, pdfBuffer);
+
+        await printPdfWithQuotedPrinterName(pdfPath, {
+          printer: targetPrinter,
+          scale: "noscale",
+          orientation: "landscape",
+          copies: 3,
+        });
+        console.log('====================================');
+        console.log(pdfPath);
+        console.log('====================================');
+        // fs.unlink(temp, () => {}); // File PDF disimpan, tidak dihapus
+        logger.info("LABEL_HTML_OK", {
+          id: req.id,
+          printer: targetPrinter,
+          path: pdfPath,
+        });
+
+        return res.json({
+          success: true,
+          message: `Sent scaled HTML LABEL to ${targetPrinter} and saved to ${pdfPath}`,
+          path: pdfPath,
+        });
+      } catch (e) {
+        logger.error("LABEL_HTML_ERROR", {
+          id: req.id,
+          error: e.message,
+          stack: e.stack,
+        });
+        return res.status(500).json({ success: false, error: e.message });
+      } finally {
+        if (browser) await browser.close();
+      }
     }
-    const temp = writeTempFile(buffer, "lbl");
-    const sharePath = buildSharePath(printerShare);
-    await copyBinaryToPrinter(temp, sharePath);
-    logger.info("LABEL_OK", { id: req.id, sharePath });
-    res.json({ success: true, message: `Sent LABEL to ${sharePath}` });
+
+    return res.status(400).json({
+      success: false,
+      error: "Payload is required. Provide 'html' for HTML content.",
+    });
   } catch (e) {
     logger.error("LABEL_ERROR", { id: req.id, error: e.message, stack: e.stack });
     res.status(500).json({ success: false, error: e.message });
   }
 });
+
 
 // ---- PDF (base64) -> silent print via driver ----
 // Body: { pdfBase64: string, printer: string }
@@ -537,8 +792,7 @@ app.post("/print-pdf", async (req, res) => {
         .json({ success: false, error: "pdfBase64 and printer are required" });
     }
     const buffer = Buffer.from(pdfBase64, "base64");
-    const temp = writeTempFile(buffer, "pdf");
-    await printPdf(temp, { printer, scale: "noscale" });
+    await printPdfWithQuotedPrinterName(temp, { printer, scale: "noscale" });
     fs.unlink(temp, () => {});
     logger.info("PDF_OK", { id: req.id, printer });
     res.json({ success: true, message: `Sent PDF to ${printer}` });
@@ -582,7 +836,7 @@ app.post("/print-html", async (req, res) => {
     });
 
     const temp = writeTempFile(pdfBuffer, "pdf");
-    await printPdf(temp, { printer, scale: "noscale" });
+    await printPdfWithQuotedPrinterName(temp, { printer, scale: "noscale" });
     fs.unlink(temp, () => {});
     logger.info("HTML_OK", { id: req.id, printer, width, heightPx: finalHeight });
     res.json({ success: true, message: `Sent HTML as PDF to ${printer}` });
