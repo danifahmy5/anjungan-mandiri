@@ -194,6 +194,7 @@ try {
   Write-Host "Menjalankan instalasi dependency…"
   NpmInstall-In $JKN_DIR
   NpmInstall-In $PRN_DIR
+  Write-Host $PRN_DIR
 
   Write-Host "Menjalankan apps dengan pm2…"
   PM2-StartOrRestart (Join-Path $JKN_DIR "index.js") "jkn-fp-bot-main"

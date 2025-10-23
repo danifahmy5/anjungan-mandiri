@@ -83,6 +83,7 @@ if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
 const CETAK_DIR = process.env.CETAK_DIR || path.join(process.cwd(), "cetak");
 if (!fs.existsSync(CETAK_DIR)) fs.mkdirSync(CETAK_DIR, { recursive: true });
+const LABEL_PDF_FILENAME = process.env.LABEL_PDF_FILENAME || "label.pdf";
 
 const rotate = new transports.DailyRotateFile({
   dirname: LOG_DIR,
@@ -731,10 +732,7 @@ app.post("/print-label", async (req, res) => {
           padding: { top: "0px", right: "0px", bottom: "0px", left: "200px" },
         });
 
-        const pdfPath = path.join(
-          CETAK_DIR,
-          `label-${Date.now()}-${req.id}.pdf`
-        );
+        const pdfPath = path.join(CETAK_DIR, LABEL_PDF_FILENAME);
         fs.writeFileSync(pdfPath, pdfBuffer);
 
         await printPdfWithQuotedPrinterName(pdfPath, {
