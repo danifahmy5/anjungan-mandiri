@@ -24,6 +24,9 @@ const { getPrinters } = require("pdf-to-printer");
 
 // Patched version of pdf-to-printer's print() to handle spaces in printer names on Windows
 function printPdfWithQuotedPrinterName(filePath, options) {
+  console.log('===========================ccccc========');
+  console.log(filePath);
+  console.log('====================================');
   return new Promise((resolve, reject) => {
     // Path to SumatraPDF executable within pdf-to-printer
     const sumatraPdfPath = path.join(
@@ -84,6 +87,7 @@ if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 const CETAK_DIR = process.env.CETAK_DIR || path.join(process.cwd(), "cetak");
 if (!fs.existsSync(CETAK_DIR)) fs.mkdirSync(CETAK_DIR, { recursive: true });
 const LABEL_PDF_FILENAME = process.env.LABEL_PDF_FILENAME || "label.pdf";
+const HTML_PDF_FILENAME = process.env.HTML_PDF_FILENAME || "print-html.pdf";
 
 const rotate = new transports.DailyRotateFile({
   dirname: LOG_DIR,
@@ -697,7 +701,7 @@ app.post("/print-label", async (req, res) => {
             body { margin: 0; padding: 0; }
             .label-container {
               width: 60mm;
-              height: 20mm;
+              height: 22mm;
               box-sizing: border-box;
               overflow: visible;
               transform-origin: top left;
@@ -727,7 +731,7 @@ app.post("/print-label", async (req, res) => {
         // hasilkan PDF
         const pdfBuffer = await page.pdf({
           width: "60mm",
-          height: "20mm",
+          height: "22mm",
           printBackground: true,
           padding: { top: "0px", right: "0px", bottom: "0px", left: "200px" },
         });
@@ -741,9 +745,6 @@ app.post("/print-label", async (req, res) => {
           orientation: "landscape",
           copies: 3,
         });
-        console.log('====================================');
-        console.log(pdfPath);
-        console.log('====================================');
         // fs.unlink(temp, () => {}); // File PDF disimpan, tidak dihapus
         logger.info("LABEL_HTML_OK", {
           id: req.id,
@@ -833,11 +834,15 @@ app.post("/print-html", async (req, res) => {
       margin: { top: "0px", right: "0px", bottom: "0px", left: "0px" },
     });
 
-    const temp = writeTempFile(pdfBuffer, "pdf");
-    await printPdfWithQuotedPrinterName(temp, { printer, scale: "noscale" });
-    fs.unlink(temp, () => {});
-    logger.info("HTML_OK", { id: req.id, printer, width, heightPx: finalHeight });
-    res.json({ success: true, message: `Sent HTML as PDF to ${printer}` });
+    const pdfPath = path.join(CETAK_DIR, HTML_PDF_FILENAME);
+    fs.writeFileSync(pdfPath, pdfBuffer);
+    await printPdfWithQuotedPrinterName(pdfPath, { printer, scale: "noscale" });
+    logger.info("HTML_OK", { id: req.id, printer, width, heightPx: finalHeight, path: pdfPath });
+    res.json({
+      success: true,
+      message: `Sent HTML as PDF to ${printer} and saved to ${pdfPath}`,
+      path: pdfPath,
+    });
   } catch (e) {
     logger.error("HTML_ERROR", { id: req.id, error: e.message, stack: e.stack });
     res.status(500).json({ success: false, error: e.message });
