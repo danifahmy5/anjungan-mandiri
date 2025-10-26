@@ -1,0 +1,25 @@
+apps:
+  - name: jkn-fp-bot
+    script: jkn-fp-bot-main/index.js
+    cwd: .
+    instances: 1
+    exec_mode: fork
+    watch: false
+    autorestart: true
+    max_restarts: 10
+    exp_backoff_restart_delay: 100
+    env:
+      NODE_ENV: production
+    time: true
+  - name: node-print-server
+    script: node-print-server/server.js
+    cwd: .
+    instances: 1
+    exec_mode: fork
+    watch: false
+    autorestart: true
+    max_restarts: 10
+    exp_backoff_restart_delay: 100
+    env:
+      NODE_ENV: production
+    time: true

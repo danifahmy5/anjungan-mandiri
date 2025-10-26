@@ -2,7 +2,7 @@
 
 **Lokasi proyek:** `{ROOT_DIR}/anjungan-mandiri`
 
-Repositori ini berisi dua aplikasi yang akan dijalankan bersamaan menggunakan **PM2**:
+Repositori ini berisi dua aplikasi yang akan dijalankan bersamaan menggunakan baca dengan teliti baca Basmallah semoga instalasi di mudahkan Allah Subhanahu Wataala **PM2**:
 
 - `jkn-fp-bot-main/index.js`
 - `node-print-server/server.js`
@@ -11,8 +11,6 @@ Agar instalasi mudah dan konsisten di Windows maupun Linux, gunakan skrip otomat
 
 - `windows.ps1` — instal & jalankan di **Windows**
 - `linux.sh` — instal & jalankan di **Linux**
--  — jalankan di powershele dengan administrator agar ps1 dapat di jalankan
-- `powershell -NoProfile -ExecutionPolicy Bypass -File .\windows.ps1` cara menjalankannya
 
 > **Catatan:** Kedua skrip mendeteksi folder dasar (base dir) dari lokasi file skrip, jadi Anda cukup meletakkannya di **`{ROOT_DIR}/anjungan-mandiri`**.
 
@@ -31,7 +29,7 @@ Agar instalasi mudah dan konsisten di Windows maupun Linux, gunakan skrip otomat
 
 ## 2) Instalasi Cepat
 
-### Windows
+### Windows ps1
 1. Buka **PowerShell** sebagai **Administrator**.
 2. Pindah ke folder proyek:
    ```powershell
@@ -50,6 +48,33 @@ Agar instalasi mudah dan konsisten di Windows maupun Linux, gunakan skrip otomat
      ```powershell
      powershell -NoProfile -ExecutionPolicy Bypass -File .\windows.ps1
      ```
+### Windows yaml pm2
+Jalankan kedua aplikasi menggunakan file `ecosystem.config.yaml` yang sudah disediakan:
+
+```powershell
+# dari folder proyek
+cd {ROOT_DIR}/anjungan-mandiri
+
+# mulai semua app di YAML
+pm2 start ecosystem.config.yaml
+
+# simpan daftar proses agar autostart
+pm2 save
+
+# aktifkan autostart di Windows (jalankan perintah yang muncul sebagai Administrator)
+pm2 startup
+
+# setelah menjalankan perintah yang diminta PM2, simpan lagi
+pm2 save
+
+# reload jika YAML berubah
+pm2 startOrReload ecosystem.config.yaml
+
+# jalankan hanya salah satu app jika perlu
+pm2 start ecosystem.config.yaml --only jkn-fp-bot
+pm2 start ecosystem.config.yaml --only node-print-server
+```
+
 
 ### Linux (Ubuntu/Debian/CentOS/others)
 1. Pindah ke folder proyek:
@@ -81,33 +106,7 @@ Agar instalasi mudah dan konsisten di Windows maupun Linux, gunakan skrip otomat
      - **`jkn-fp-bot-main`** → menjalankan `index.js`
      - **`node-print-server`** → menjalankan `server.js`
 
-> Jika Anda menambahkan file **`ecosystem.config.js`** di folder ini, skrip bisa men-start keduanya sekaligus dari satu file konfigurasi PM2.
-
-Contoh `ecosystem.config.js` (opsional):
-```js
-module.exports = {
-  apps: [
-    {
-      name: 'jkn-fp-bot-main',
-      cwd: './jkn-fp-bot-main',
-      script: 'index.js',
-      env: { NODE_ENV: 'production' },
-      autorestart: true,
-      max_restarts: 10,
-      time: true
-    },
-    {
-      name: 'node-print-server',
-      cwd: './node-print-server',
-      script: 'server.js',
-      env: { NODE_ENV: 'production' },
-      autorestart: true,
-      max_restarts: 10,
-      time: true
-    }
-  ]
-}
-```
+> Repositori ini sudah menyertakan file **`ecosystem.config.yaml`** untuk menyalakan kedua aplikasi sekaligus dengan PM2.
 
 ---
 
@@ -227,7 +226,7 @@ pm2 unstartup
 anjungan-mandiri/
 ├─ windows.ps1
 ├─ linux.sh
-├─ ecosystem.config.js   # (opsional)
+├─ ecosystem.config.yaml
 ├─ jkn-fp-bot-main/
 │  ├─ index.js
 │  └─ package.json
