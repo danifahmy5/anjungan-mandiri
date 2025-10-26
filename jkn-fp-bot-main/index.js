@@ -117,14 +117,14 @@ async function run_bot({ username, password, card_number, exit, wait }) {
 		// clear and enter the username
 		await bot.send('^a');
 		await bot.send('{BACKSPACE}');
-		await bot.send(username);
+		await bot.send(username, 1);
 
 		await bot.send('{TAB}');
 
 		// clear and enter the password
 		await bot.send('^a');
 		await bot.send('{BACKSPACE}');
-		await bot.send(password);
+		await bot.send(password, 1);
 
 		// hit enter key for login
 		await bot.send('{ENTER}');
@@ -133,7 +133,7 @@ async function run_bot({ username, password, card_number, exit, wait }) {
 	}
 
 	// send card number
-	await bot.send(card_number);
+	await bot.send(card_number, 1);
 
 	if (exit) {
 		// wait for window to close

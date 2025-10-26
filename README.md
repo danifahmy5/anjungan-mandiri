@@ -1,6 +1,7 @@
 # Anjungan Mandiri — Panduan Instalasi (Windows & Linux)
 
-**Lokasi proyek:** `{ROOT_DIR}/anjungan-mandiri`
+**Lokasi proyek(windows):** `C:/Kioks/`
+**Lokasi proyek(linux):** `/kiosk/`
 
 Repositori ini berisi dua aplikasi yang akan dijalankan bersamaan menggunakan baca dengan teliti baca Basmallah semoga instalasi di mudahkan Allah Subhanahu Wataala **PM2**:
 
@@ -74,6 +75,40 @@ pm2 startOrReload ecosystem.config.yaml
 pm2 start ecosystem.config.yaml --only jkn-fp-bot
 pm2 start ecosystem.config.yaml --only node-print-server
 ```
+
+
+### Membuat Start-up Chrome (Windows)
+Gunakan skrip `start-up-chrome.bat` untuk membuka Chrome secara otomatis dalam mode kiosk saat Windows mulai/logon.
+
+1. Edit URL pada `start-up-chrome.bat`:
+   ```bat
+   set URL=http://localhost:8000/display/doctor-queue
+   ```
+   Simpan, lalu uji dengan klik dua kali file tersebut. Pastikan Chrome terbuka sesuai harapan.
+
+2. Atur via Task Scheduler (disarankan):
+   - Buka Task Scheduler → Create Task.
+   - Tab General:
+     - Name: Anjungan Chrome Kiosk
+     - Run only when user is logged on
+     - (Opsional) Run with highest privileges
+   - Tab Triggers → New…
+     - Begin the task: At log on
+     - (Opsional) Delay task for: 30 seconds
+   - Tab Actions → New…
+     - Action: Start a program
+     - Program/script: masukkan path penuh ke `start-up-chrome.bat`
+     - Start in (optional): folder tempat file `.bat` berada
+   - Tab Conditions: hilangkan centang yang tidak perlu (opsional)
+   - Tab Settings: centang “Run task as soon as possible after a scheduled start is missed”.
+
+3. Alternatif sederhana: Startup folder
+   - Tekan `Win + R` → ketik `shell:startup` → Enter.
+   - Salin shortcut ke `start-up-chrome.bat` ke folder tersebut.
+
+Catatan:
+- Skrip sudah menyertakan parameter Chrome untuk mode kiosk dan mencegah sleep. Sebagian pengaturan daya bisa memerlukan hak Administrator.
+- Jika Chrome tidak ditemukan di lokasi default, sesuaikan variabel `CHROME1`/`CHROME2` pada `.bat`.
 
 
 ### Linux (Ubuntu/Debian/CentOS/others)

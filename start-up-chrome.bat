@@ -47,5 +47,7 @@ powercfg -change -hibernate-timeout-ac 0 >nul
 REM --- OPSIONAL: Tunggu 5 detik agar audio siap ---
 timeout /t 5 /nobreak >nul
 
+echo [%date% %time%] Chrome started >> C:\Kiosk\kiosk.log
+
 REM --- Tutup command prompt setelah selesai ---
 exit
