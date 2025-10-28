@@ -6,7 +6,7 @@ REM  Jalankan via Task Scheduler (At Startup)
 REM ============================================
 
 REM --- GANTI URL DI BAWAH INI SESUAI APLIKASI ANDA ---
-set URL=http://localhost:8000/display/doctor-queue
+set URL=http://192.168.1.9:8006/display/doctor-queue
 
 REM --- LOKASI DEFAULT GOOGLE CHROME (64-bit & 32-bit) ---
 set CHROME1="C:\Program Files\Google\Chrome\Application\chrome.exe"
