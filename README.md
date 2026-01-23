@@ -21,7 +21,7 @@ Agar instalasi mudah dan konsisten di Windows maupun Linux, gunakan skrip otomat
 
 - Akses internet.
 - Hak Administrator (Windows) atau sudoer (Linux) untuk instalasi paket.
-- **Node.js 22.20.x** (akan dipasang otomatis bila belum ada).
+- **Node.js 22.20.x** (akan dipasang otomatis bila belum ada jika tidak terpasang secara otomatis download di sini : https://drive.google.com/drive/folders/1V1wQapzgyvzD8mb9BSFqHWryy3SSWoSe?usp=drive_link).
 - **pm2** (akan dipasang otomatis bila belum ada).
 
 > Versi Node yang digunakan: **22.20.x** untuk kompatibilitas dengan dependensi saat ini.
