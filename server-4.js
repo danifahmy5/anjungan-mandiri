@@ -754,9 +754,10 @@ app.post("/print-label", async (req, res) => {
         await printPdfWithQuotedPrinterName(pdfPath, {
           printer: targetPrinter,
           scale: "noscale",
-          // Argox membutuhkan orientasi portrait agar tulisan tidak tercetak
-          // menyamping dan label tidak perlu diputar ke kiri untuk dibaca.
-          orientation: "portrait",
+          // Media Argox lebarnya 60 mm dan tinggi/feed-nya 20 mm. Landscape
+          // menjaga satu halaman PDF tepat satu stiker; portrait membuat driver
+          // menukar ukuran menjadi 20 x 60 mm dan melewati beberapa stiker kosong.
+          orientation: "landscape",
           copies: LABEL_COPIES,
         });
         // fs.unlink(temp, () => {}); // File PDF disimpan, tidak dihapus
