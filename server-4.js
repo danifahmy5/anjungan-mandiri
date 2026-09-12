@@ -52,8 +52,8 @@ function printPdfWithQuotedPrinterName(filePath, options) {
     if (options.scale === "noscale") {
       printSettings.push("noscale");
     }
-    if (options.orientation === "landscape") {
-      printSettings.push("landscape");
+    if (options.orientation === "landscape" || options.orientation === "portrait") {
+      printSettings.push(options.orientation);
     }
     if (options.copies && Number.isInteger(options.copies) && options.copies > 0) {
       printSettings.push(`${options.copies}x`);
@@ -754,7 +754,9 @@ app.post("/print-label", async (req, res) => {
         await printPdfWithQuotedPrinterName(pdfPath, {
           printer: targetPrinter,
           scale: "noscale",
-          // PDF sudah landscape (60 x 20 mm); jangan rotasi lagi di driver.
+          // Argox membutuhkan orientasi portrait agar tulisan tidak tercetak
+          // menyamping dan label tidak perlu diputar ke kiri untuk dibaca.
+          orientation: "portrait",
           copies: LABEL_COPIES,
         });
         // fs.unlink(temp, () => {}); // File PDF disimpan, tidak dihapus
