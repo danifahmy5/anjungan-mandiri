@@ -21,6 +21,8 @@ const Service = require('node-windows').Service;
 // 2. OTOMATISASI & PEMBUATAN KONFIGURASI PUPPETEER (NODE PRINT SERVER)
 // =========================================================================
 const printServerPath = path.join(__dirname, 'node-print-server');
+const sumatraDir = path.join(printServerPath, 'bin', 'sumatra');
+const sumatraPath = path.join(sumatraDir, 'SumatraPDF-3.6.1-64.exe');
 
 try {
   console.log('=== [2/5] Menyiapkan Node Print Server ===');
@@ -43,6 +45,28 @@ module.exports = {
   // Menjalankan download Chrome secara eksplisit
   console.log('👉 Mengunduh ulang Chrome Puppeteer ke folder lokal...');
   execSync('npx puppeteer browsers install chrome', { cwd: printServerPath, stdio: 'inherit' });
+
+  // Versi 3.4.6 bawaan pdf-to-printer belum mendukung disable-auto-rotation.
+  if (!fs.existsSync(sumatraPath)) {
+    console.log('👉 Mengunduh SumatraPDF 3.6.1 untuk printer label...');
+    fs.mkdirSync(sumatraDir, { recursive: true });
+    const sumatraZip = path.join(sumatraDir, 'SumatraPDF-3.6.1-64.zip');
+    const downloadUrl = 'https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64.zip';
+    const psCommand = [
+      "$ErrorActionPreference='Stop'",
+      `Invoke-WebRequest -Uri '${downloadUrl}' -OutFile '${sumatraZip}'`,
+      `Expand-Archive -LiteralPath '${sumatraZip}' -DestinationPath '${sumatraDir}' -Force`,
+      `Remove-Item -LiteralPath '${sumatraZip}' -Force`,
+    ].join('; ');
+    execSync(`powershell.exe -NoProfile -Command "${psCommand}"`, {
+      cwd: printServerPath,
+      stdio: 'inherit',
+    });
+  }
+
+  if (!fs.existsSync(sumatraPath)) {
+    throw new Error(`SumatraPDF 3.6.1 tidak ditemukan setelah instalasi: ${sumatraPath}`);
+  }
   
   console.log('✅ Setup folder node-print-server beserta Chrome selesai!\n');
 } catch (error) {
@@ -102,6 +126,7 @@ const printService = new Service({
     { name: 'LABEL_WIDTH', value: '60mm' },
     { name: 'LABEL_HEIGHT', value: '20mm' },
     { name: 'LABEL_COPIES', value: '3' },
+    { name: 'SUMATRA_PDF_PATH', value: sumatraPath },
     // Jaga-jaga jika config rc terlewati, env variable tetap mengunci jalurnya
     { name: 'PUPPETEER_CACHE_DIR', value: path.join(printServerPath, '.cache', 'puppeteer') }
   ]
